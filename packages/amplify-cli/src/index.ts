@@ -1,6 +1,6 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { CLIContextEnvironmentProvider, FeatureFlags, JSONUtilities, $TSAny } from 'amplify-cli-core';
+import { CLIContextEnvironmentProvider, FeatureFlags, JSONUtilities, $TSAny, pathManager, stateManager } from 'amplify-cli-core';
 import { Input } from './domain/input';
 import { getPluginPlatform, scan } from './plugin-manager';
 import { getCommandLineInput, verifyInput } from './input-manager';
@@ -32,6 +32,10 @@ export async function run() {
       // Checks for available update, defaults to a 1 day interval for notification
       notifier.notify({ defer: false, isGlobal: true });
     }
+
+    ensureFilePermissions(pathManager.getAWSCredentialsFilePath());
+    ensureFilePermissions(pathManager.getAWSConfigFilePath());
+
     let verificationResult = verifyInput(pluginPlatform, input);
 
     // invalid input might be because plugin platform might have been updated,
@@ -61,28 +65,9 @@ export async function run() {
       getEnvInfo: context.amplify.getEnvInfo,
     });
 
-    const getProjectPath = (): string => {
-      try {
-        let { projectPath } = context.amplify.getEnvInfo();
-
-        // Check if the returned path exists, because it is possible that
-        // local-env-info.json is checked in and contains an invalid path
-        // https://github.com/aws-amplify/amplify-cli/issues/4950
-        if (projectPath && !fs.pathExistsSync(projectPath)) {
-          projectPath = '';
-        }
-
-        return projectPath;
-      } catch {
-        return '';
-      }
-    };
-
-    const projectPath = getProjectPath();
-
-    if (projectPath) {
-      await FeatureFlags.initialize(contextEnvironmentProvider, projectPath);
-    }
+    const projectPath = pathManager.findProjectRoot() ?? process.cwd();
+    const useNewDefaults = !stateManager.projectConfigExists(projectPath);
+    await FeatureFlags.initialize(contextEnvironmentProvider, useNewDefaults);
 
     await attachUsageData(context);
     errorHandler = boundErrorHandler.bind(context);
@@ -108,6 +93,13 @@ export async function run() {
       print.info(e.stack);
     }
     process.exit(1);
+  }
+}
+
+function ensureFilePermissions(filePath) {
+  // eslint-disable-next-line no-bitwise
+  if (fs.existsSync(filePath) && (fs.statSync(filePath).mode & 0o777) === 0o644) {
+    fs.chmodSync(filePath, '600');
   }
 }
 
