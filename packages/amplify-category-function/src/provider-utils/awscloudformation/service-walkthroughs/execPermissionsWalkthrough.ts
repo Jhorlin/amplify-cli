@@ -11,7 +11,9 @@ import {
   fetchPermissionsForResourceInCategory,
 } from '../utils/permissionMapUtils';
 import { FunctionParameters, FunctionDependency } from 'amplify-function-plugin-interface/src';
-
+import { appsyncTableSuffix } from '../utils/constants';
+import { getAppSyncResourceName } from '../utils/appSyncHelper';
+import { stateManager } from 'amplify-cli-core';
 /**
  * This whole file desperately needs to be refactored
  */
@@ -19,16 +21,15 @@ export const askExecRolePermissionsQuestions = async (
   context,
   lambdaFunctionToUpdate: string,
   currentPermissionMap?,
+  currentEnvMap?,
 ): Promise<ExecRolePermissionsResponse> => {
-  const amplifyMeta = context.amplify.getProjectMeta();
+  const amplifyMeta = stateManager.getMeta();
 
   const categories = Object.keys(amplifyMeta).filter(category => category !== 'providers');
 
   // retrieve api's AppSync resource name for conditional logic
   // in blending appsync @model-backed dynamoDB tables into storage category flow
-  const appsyncResourceName =
-    'api' in amplifyMeta ? Object.keys(amplifyMeta.api).find(key => amplifyMeta.api[key].service === 'AppSync') : undefined;
-
+  const appsyncResourceName = getAppSyncResourceName();
   // if there is api category AppSync resource and no storage category, add it back to selection
   // since storage category is responsible for managing appsync @model-backed dynamoDB table permissions
   if (!categories.includes('storage') && appsyncResourceName !== undefined) {
@@ -51,7 +52,6 @@ export const askExecRolePermissionsQuestions = async (
   const permissions = {};
 
   const backendDir = context.amplify.pathManager.getBackendDirPath();
-  const appsyncTableSuffix = '@model(appsync)';
 
   for (let category of selectedCategories) {
     let resourcesList = category in amplifyMeta ? Object.keys(amplifyMeta[category]) : [];
@@ -233,6 +233,12 @@ export const askExecRolePermissionsQuestions = async (
       });
     }
   });
+
+  if (currentEnvMap) {
+    _.keys(currentEnvMap).forEach(key => {
+      envVars.add(key);
+    });
+  }
 
   const envVarStringList = Array.from(envVars)
     .sort()
