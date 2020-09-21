@@ -1,6 +1,6 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { CLIContextEnvironmentProvider, FeatureFlags, JSONUtilities, $TSAny } from 'amplify-cli-core';
+import { CLIContextEnvironmentProvider, FeatureFlags, pathManager, stateManager } from 'amplify-cli-core';
 import { Input } from './domain/input';
 import { getPluginPlatform, scan } from './plugin-manager';
 import { getCommandLineInput, verifyInput } from './input-manager';
@@ -10,10 +10,7 @@ import { executeCommand } from './execution-manager';
 import { Context } from './domain/context';
 import { constants } from './domain/constants';
 import { checkProjectConfigVersion } from './project-config-version-check';
-import { default as updateNotifier } from 'update-notifier';
-
-const pkg = JSONUtilities.readJson<$TSAny>(path.join(__dirname, '..', 'package.json'));
-const notifier = updateNotifier({ pkg }); // defaults to 1 day interval
+import { notify } from './version-notifier';
 
 // Adjust defaultMaxListeners to make sure Inquirer will not fail under Windows because of the multiple subscriptions
 // https://github.com/SBoudrias/Inquirer.js/issues/887
@@ -30,8 +27,12 @@ export async function run() {
     // with non-help command supplied, give notification before execution
     if (input.command !== 'help') {
       // Checks for available update, defaults to a 1 day interval for notification
-      notifier.notify({ defer: false, isGlobal: true });
+      notify({ defer: false, isGlobal: true });
     }
+
+    ensureFilePermissions(pathManager.getAWSCredentialsFilePath());
+    ensureFilePermissions(pathManager.getAWSConfigFilePath());
+
     let verificationResult = verifyInput(pluginPlatform, input);
 
     // invalid input might be because plugin platform might have been updated,
@@ -61,28 +62,9 @@ export async function run() {
       getEnvInfo: context.amplify.getEnvInfo,
     });
 
-    const getProjectPath = (): string => {
-      try {
-        let { projectPath } = context.amplify.getEnvInfo();
-
-        // Check if the returned path exists, because it is possible that
-        // local-env-info.json is checked in and contains an invalid path
-        // https://github.com/aws-amplify/amplify-cli/issues/4950
-        if (projectPath && !fs.pathExistsSync(projectPath)) {
-          projectPath = '';
-        }
-
-        return projectPath;
-      } catch {
-        return '';
-      }
-    };
-
-    const projectPath = getProjectPath();
-
-    if (projectPath) {
-      await FeatureFlags.initialize(contextEnvironmentProvider, projectPath);
-    }
+    const projectPath = pathManager.findProjectRoot() ?? process.cwd();
+    const useNewDefaults = !stateManager.projectConfigExists(projectPath);
+    await FeatureFlags.initialize(contextEnvironmentProvider, useNewDefaults);
 
     await attachUsageData(context);
     errorHandler = boundErrorHandler.bind(context);
@@ -95,7 +77,7 @@ export async function run() {
     // no command supplied defaults to help, give update notification at end of execution
     if (input.command === 'help') {
       // Checks for available update, defaults to a 1 day interval for notification
-      notifier.notify({ defer: true, isGlobal: true });
+      notify({ defer: true, isGlobal: true });
     }
     return 0;
   } catch (e) {
@@ -111,11 +93,22 @@ export async function run() {
   }
 }
 
+function ensureFilePermissions(filePath) {
+  // eslint-disable-next-line no-bitwise
+  if (fs.existsSync(filePath) && (fs.statSync(filePath).mode & 0o777) === 0o644) {
+    fs.chmodSync(filePath, '600');
+  }
+}
+
 function boundErrorHandler(this: Context, e: Error) {
   this.usageData.emitError(e);
 }
+
 function sigIntHandler(this: Context, e: any) {
   this.usageData.emitAbort();
+  this.print.warn('^Aborted!');
+  //exit on abort
+  process.exit(2);
 }
 
 // entry from library call
