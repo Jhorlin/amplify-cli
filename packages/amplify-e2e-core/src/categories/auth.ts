@@ -1,5 +1,4 @@
-import { KEY_UP_ARROW } from '../utils';
-import { nspawn as spawn, KEY_DOWN_ARROW, getCLIPath, getSocialProviders } from '../../src';
+import { nspawn as spawn, KEY_UP_ARROW, KEY_DOWN_ARROW, getCLIPath, getSocialProviders } from '..';
 
 export function addAuthWithDefault(cwd: string, settings: any = {}) {
   return new Promise((resolve, reject) => {
@@ -11,6 +10,22 @@ export function addAuthWithDefault(cwd: string, settings: any = {}) {
       .wait('Do you want to configure advanced settings?')
       .sendCarriageReturn()
       .sendEof()
+      .run((err: Error) => {
+        if (!err) {
+          resolve();
+        } else {
+          reject(err);
+        }
+      });
+  });
+}
+
+export function runAmplifyAuthConsole(cwd: string) {
+  return new Promise((resolve, reject) => {
+    spawn(getCLIPath(), ['auth', 'console'], { cwd, stripColors: true })
+      .wait('Which console')
+      .sendCarriageReturn()
+      .wait('Identity Pool console:')
       .run((err: Error) => {
         if (!err) {
           resolve();

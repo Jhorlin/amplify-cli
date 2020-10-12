@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.16.5](https://github.com/aws-amplify/amplify-cli/compare/amplify-frontend-javascript@2.16.4...amplify-frontend-javascript@2.16.5) (2020-10-07)
+
+**Note:** Version bump only for package amplify-frontend-javascript
+
+
+
+
+
+## [2.16.4](https://github.com/aws-amplify/amplify-cli/compare/amplify-frontend-javascript@2.16.3...amplify-frontend-javascript@2.16.4) (2020-09-25)
+
+
+### Bug Fixes
+
+* **amplify-frontend-javascript:** fix headless pull ([42ccc0e](https://github.com/aws-amplify/amplify-cli/commit/42ccc0eb2316cbcc85256909ea1868a0e5398008)), closes [#5228](https://github.com/aws-amplify/amplify-cli/issues/5228)
+
+
+
+
+
 ## [2.16.3](https://github.com/aws-amplify/amplify-cli/compare/amplify-frontend-javascript@2.16.2...amplify-frontend-javascript@2.16.3) (2020-09-16)
 
 

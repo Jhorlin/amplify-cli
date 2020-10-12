@@ -103,11 +103,17 @@ async function getAmplifyApp(context, amplifyClient) {
       context.print.info(`Amplify AppID found: ${inputAmplifyAppId}. Amplify App name is: ${getAppResult.app.name}`);
       return getAppResult.app;
     } catch (e) {
-      context.print.error(
-        `Amplify AppID: ${inputAmplifyAppId} not found. Please ensure your local profile matches the AWS account or region in which the Amplify app exists.`,
-      );
-      context.print.info(e);
-      throw e;
+      if (e.name && e.name === 'NotFoundException') {
+        const error = new Error(`${e.message} Check that the region of the Amplify App is matching the configured region.`);
+        error.stack = undefined;
+        throw error;
+      } else {
+        context.print.error(
+          `Amplify AppID: ${inputAmplifyAppId} not found. Please ensure your local profile matches the AWS account or region in which the Amplify app exists.`,
+        );
+        context.print.info(e);
+        throw e;
+      }
     }
   }
 
@@ -252,8 +258,9 @@ async function downloadBackend(context, backendEnv, awsConfig) {
       absolute: true,
     });
     const amplifyDir = pathManager.getAmplifyDirPath();
+    const isPulling = context.input.command === 'pull' || (context.input.command === 'env' && context.input.subCommands[0] === 'pull');
 
-    if (context.exeInfo && context.exeInfo.restoreBackend) {
+    if ((context.exeInfo && context.exeInfo.restoreBackend) || isPulling) {
       // If backend must be restored then copy out the config files and overwrite existing ones.
       for (const cliJSONFilePath of cliJSONFiles) {
         const targetPath = path.join(amplifyDir, path.basename(cliJSONFilePath));
