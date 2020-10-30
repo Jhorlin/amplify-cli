@@ -1,3 +1,5 @@
+import { join } from 'path';
+
 // Reusable go runtime specific string literals
 export const BIN_LOCAL = 'bin-local';
 export const BIN = 'bin';
@@ -10,3 +12,6 @@ export const MAIN_DEBUG_BIN = '__debug_bin';
 
 export const BASE_PORT = 8900;
 export const MAX_PORT = 9999;
+
+export const packageName = 'amplify-go-function-runtime-provider';
+export const relativeShimSrcPath = join('resources', 'localinvoke');

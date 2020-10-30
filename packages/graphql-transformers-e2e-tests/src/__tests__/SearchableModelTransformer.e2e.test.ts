@@ -276,6 +276,49 @@ test('Test searchPosts with sort field on a string field', async () => {
   expect(firstItemOfThirdQuery).toEqual(fourthItemOfFirstQuery);
 });
 
+test('Test searchPosts with offset pagination', async () => {
+  const firstQuery = await runQuery(
+    `query {
+        searchPosts(from: 0, limit: 999, sort: {
+            field: id
+            direction: desc
+        }){
+            items{
+              ...FullPost
+            }
+            nextToken
+            total
+          }
+    }`,
+    'Test searchPosts with offset pagination ',
+  );
+  expect(firstQuery).toBeDefined();
+  expect(firstQuery.data.searchPosts).toBeDefined();
+  const firstLength = firstQuery.data.searchPosts.items.length;
+  const secondQuery = await runQuery(
+    `query {
+        searchPosts(from: 2, limit: 999, sort: {
+            field: id
+            direction: desc
+        }){
+            items{
+              ...FullPost
+            }
+            nextToken
+            total
+          }
+    }`,
+    'Test searchPosts with offset pagination 2 ',
+  );
+  expect(secondQuery).toBeDefined();
+  expect(secondQuery.data.searchPosts).toBeDefined();
+  const secondLength = secondQuery.data.searchPosts.items.length;
+  expect(secondLength).toEqual(firstLength - 2);
+  const firstItem = firstQuery.data.searchPosts.items[0];
+  const secondItems = secondQuery.data.searchPosts.items;
+  expect(secondItems.find(i => i.id === firstItem.id)).not.toBeDefined();
+});
+
 test('Test searchPosts with sort on date type', async () => {
   const query = await runQuery(
     `query {
@@ -785,7 +828,7 @@ test('query using string range between names', async () => {
   });
 });
 
-test('query using date range for createdAt', async () => {
+test('query using date range using lte and gte for createdAt', async () => {
   const expectedDates = ['2017-06-10', '2017-08-22'];
   const expectedLength = 2;
   const searchResponse = await GRAPHQL_CLIENT.query(
@@ -813,6 +856,28 @@ test('query using date range for createdAt', async () => {
   items.forEach((item: any) => {
     expect(expectedDates).toContain(item.createdAt);
   });
+});
+
+test('query using date range for createdAt', async () => {
+  const expectLength = 3;
+  const searchResponse = await GRAPHQL_CLIENT.query(
+    `query {
+      searchUsers(filter: {createdAt: {range: ["2016", "2019"]}}) {
+        items {
+          id
+          name
+          createdAt
+          userItems
+        }
+      }
+    }
+    `,
+    {},
+  );
+  expect(searchResponse).toBeDefined();
+  const items = searchResponse.data.searchUsers.items;
+  expect(items.length).toEqual(expectLength);
+  expect(items.map(item => item.createdAt).sort()).toEqual(['2016-07-20', '2017-06-10', '2017-08-22']);
 });
 
 test('query for books by Agatha Christie with model using @key', async () => {
