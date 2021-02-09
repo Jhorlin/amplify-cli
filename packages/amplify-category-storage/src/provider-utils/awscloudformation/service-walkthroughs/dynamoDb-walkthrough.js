@@ -3,8 +3,10 @@ const inquirer = require('inquirer');
 const path = require('path');
 const fs = require('fs-extra');
 const uuid = require('uuid');
-const { ServiceName: FunctionServiceName } = require('amplify-category-function');
 const { ResourceDoesNotExistError, exitOnNextTick } = require('amplify-cli-core');
+
+// keep in sync with ServiceName in amplify-category-function, but probably it will not change
+const FunctionServiceNameLambdaFunction = 'Lambda';
 
 const category = 'storage';
 const parametersFileName = 'parameters.json';
@@ -16,7 +18,7 @@ async function addWalkthrough(context, defaultValuesFilename, serviceMetadata) {
   return configure(context, defaultValuesFilename, serviceMetadata);
 }
 
-function updateWalkthrough(context, defaultValuesFilename, serviceMetadata) {
+async function updateWalkthrough(context, defaultValuesFilename, serviceMetadata) {
   // const resourceName = resourceAlreadyExists(context);
   const { amplify } = context;
   const { amplifyMeta } = amplify.getProjectDetails();
@@ -24,7 +26,11 @@ function updateWalkthrough(context, defaultValuesFilename, serviceMetadata) {
   const dynamoDbResources = {};
 
   Object.keys(amplifyMeta[category]).forEach(resourceName => {
-    if (amplifyMeta[category][resourceName].service === serviceName && amplifyMeta[category][resourceName].mobileHubMigrated !== true) {
+    if (
+      amplifyMeta[category][resourceName].service === serviceName &&
+      amplifyMeta[category][resourceName].mobileHubMigrated !== true &&
+      amplifyMeta[category][resourceName].serviceType !== 'imported'
+    ) {
       dynamoDbResources[resourceName] = amplifyMeta[category][resourceName];
     }
   });
@@ -48,7 +54,9 @@ function updateWalkthrough(context, defaultValuesFilename, serviceMetadata) {
     },
   ];
 
-  return inquirer.prompt(question).then(answer => configure(context, defaultValuesFilename, serviceMetadata, answer.resourceName));
+  const answer = await inquirer.prompt(question);
+
+  return await configure(context, defaultValuesFilename, serviceMetadata, answer.resourceName);
 }
 
 async function configure(context, defaultValuesFilename, serviceMetadata, resourceName) {
@@ -656,7 +664,7 @@ async function addTrigger(context, resourceName, triggerList) {
     // Update amplify-meta and backend-config
 
     const backendConfigs = {
-      service: FunctionServiceName.LambdaFunction,
+      service: FunctionServiceNameLambdaFunction,
       providerPlugin: 'awscloudformation',
       build: true,
     };
@@ -778,7 +786,7 @@ async function addTrigger(context, resourceName, triggerList) {
 async function getLambdaFunctions(context) {
   const { allResources } = await context.amplify.getResourceStatus();
   const lambdaResources = allResources
-    .filter(resource => resource.service === FunctionServiceName.LambdaFunction)
+    .filter(resource => resource.service === FunctionServiceNameLambdaFunction)
     .map(resource => resource.resourceName);
 
   return lambdaResources;

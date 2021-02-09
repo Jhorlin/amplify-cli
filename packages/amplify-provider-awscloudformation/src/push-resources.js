@@ -19,8 +19,10 @@ const { loadResourceParameters } = require('./resourceParams');
 const { uploadAuthTriggerFiles } = require('./upload-auth-trigger-files');
 const archiver = require('./utils/archiver');
 const amplifyServiceManager = require('./amplify-service-manager');
-const { isMultiEnvLayer, packageLayer, ServiceName: FunctionServiceName } = require('amplify-category-function');
 const { stateManager } = require('amplify-cli-core');
+
+// keep in sync with ServiceName in amplify-category-function, but probably it will not change
+const FunctionServiceNameLambdaLayer = 'LambdaLayer';
 
 const spinner = ora('Updating resources in the cloud. This may take a few minutes...');
 const nestedStackFileName = 'nested-cloudformation-stack.yml';
@@ -156,10 +158,19 @@ async function run(context, resourceDefinition) {
     // Store current cloud backend in S3 deployment bcuket
     await storeCurrentCloudBackend(context);
     await amplifyServiceManager.storeArtifactsForAmplifyService(context);
-
+    //check for auth resources and remove deployment secret for push
+    const authResources = resources.filter(
+      resource => resource.category === 'auth' && resource.service === 'Cognito' && resource.providerPlugin === 'awscloudformation',
+    );
+    if (authResources.length > 0) {
+      for (let i = 0; i < authResources.length; i++) {
+        const authResource = authResources[i];
+        context.amplify.removeDeploymentSecrets(context, authResource.category, authResource.resourceName);
+      }
+    }
     spinner.succeed('All resources are updated in the cloud');
 
-    displayHelpfulURLs(context, resources);
+    await displayHelpfulURLs(context, resources);
   } catch (err) {
     spinner.fail('An error occurred when pushing the resources to the cloud');
     throw err;
@@ -295,7 +306,10 @@ function packageResources(context, resources) {
 
   const packageResource = (context, resource) => {
     let s3Key;
-    return (resource.service === FunctionServiceName.LambdaLayer ? packageLayer(context, resource) : buildResource(context, resource))
+    return (resource.service === FunctionServiceNameLambdaLayer
+      ? context.amplify.invokePluginMethod(context, 'function', undefined, 'packageLayer', [context, resource])
+      : buildResource(context, resource)
+    )
       .then(result => {
         // Upload zip file to S3
         s3Key = `amplify-builds/${result.zipFilename}`;
@@ -307,7 +321,7 @@ function packageResources(context, resources) {
           return s3.uploadFile(s3Params);
         });
       })
-      .then(s3Bucket => {
+      .then(async s3Bucket => {
         // Update cfn template
         const { category, resourceName } = resource;
         const backEndDir = context.amplify.pathManager.getBackendDirPath();
@@ -332,8 +346,13 @@ function packageResources(context, resources) {
         const cfnFilePath = path.normalize(path.join(resourceDir, cfnFile));
         const cfnMeta = context.amplify.readJsonFile(cfnFilePath);
 
-        if (resource.service === FunctionServiceName.LambdaLayer) {
-          if (isMultiEnvLayer(context, resourceName)) {
+        if (resource.service === FunctionServiceNameLambdaLayer) {
+          const isMultiEnvLayer = await context.amplify.invokePluginMethod(context, 'function', undefined, 'isMultiEnvLayer', [
+            context,
+            resourceName,
+          ]);
+
+          if (isMultiEnvLayer) {
             const amplifyMeta = stateManager.getMeta();
             const teamProviderInfo = stateManager.getTeamProviderInfo();
             _.set(teamProviderInfo, [context.amplify.getEnvInfo().envName, 'categories', 'function', resourceName], {
@@ -492,6 +511,11 @@ function formNestedStack(context, projectDetails, categoryName, resourceName, se
   /* eslint-enable */
   const initTemplateFilePath = path.join(__dirname, '..', 'resources', 'rootStackTemplate.json');
   const nestedStack = context.amplify.readJsonFile(initTemplateFilePath);
+  // Track Amplify Console generated stacks
+  if (!!process.env.CLI_DEV_INTERNAL_DISABLE_AMPLIFY_APP_DELETION) {
+    nestedStack.Description = 'Root Stack for AWS Amplify Console';
+  }
+
   const { amplifyMeta } = projectDetails;
   let authResourceName;
   let categories = Object.keys(amplifyMeta);

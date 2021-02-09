@@ -12,6 +12,8 @@ export * from './tags';
 export * from './errors';
 export * from './exitOnNextTick';
 export * from './isPackaged';
+export * from './cliConstants';
+export * from './deploymentSecretsHelper';
 
 // Temporary types until we can finish full type definition across the whole CLI
 
@@ -52,6 +54,14 @@ export type IPluginInfo = {
   packageVersion: string;
   packageLocation: string;
   manifest: $IPluginManifest;
+};
+
+export type DeploymentSecrets = {
+  appSecrets: Array<{
+    rootStackId: string;
+
+    environments: { [env: string]: { [category: string]: { [resourceName: string]: { [key: string]: string } } } };
+  }>;
 };
 
 /**
@@ -105,7 +115,7 @@ interface AmplifyToolkit {
   executeProviderUtils: () => $TSAny;
   getAllEnvs: () => $TSAny;
   getPlugin: () => $TSAny;
-  getCategoryPluginInfo: (context: $TSContext) => $TSAny;
+  getCategoryPluginInfo: (context: $TSContext, category?: string, service?: string) => $TSAny;
   getAllCategoryPluginInfo: (context: $TSContext) => $TSAny;
   getFrontendPlugins: () => $TSAny;
   getEnvDetails: () => $TSAny;
@@ -140,6 +150,7 @@ interface AmplifyToolkit {
     category: string,
     servicesMetadata: $TSAny,
     customQuestion?: $TSAny,
+    optionNameOverrides?: Record<string, string>,
   ) => Promise<ServiceSelection>;
   updateProjectConfig: () => $TSAny;
   updateamplifyMetaAfterResourceUpdate: () => $TSAny;
@@ -189,4 +200,5 @@ interface AmplifyToolkit {
     unauthRoleArn?: string;
     unauthRoleName?: string;
   };
+  invokePluginMethod: <T>(context: $TSContext, category: string, service: string | null, method: string, args: any[]) => Promise<T>;
 }

@@ -59,6 +59,8 @@ const KNOWN_SUITES_SORTED_ACCORDING_TO_RUNTIME = [
   'src/__tests__/api_3.test.ts',
   'src/__tests__/import_auth_1.test.ts',
   'src/__tests__/import_auth_2.test.ts',
+  'src/__tests__/import_s3_1.test.ts',
+  'src/__tests__/import_dynamodb_1.test.ts',
   //<40m
   'src/__tests__/env.test.ts',
   'src/__tests__/auth_2.test.ts',
@@ -108,6 +110,7 @@ export type CircleCIConfig = {
   jobs: {
     [name: string]: {
       steps: Record<string, any>;
+      environment: Record<string, string>;
     };
   };
   workflows: {
@@ -156,6 +159,7 @@ function splitTests(
     const newJob = {
       ...job,
       environment: {
+        ...job.environment,
         TEST_SUITE: suite,
         CLI_REGION: testRegion,
       },
@@ -295,13 +299,20 @@ function saveConfig(config: CircleCIConfig): void {
 }
 function main(): void {
   const config = loadConfig();
-  const splitConfig = splitTests(
+  const splitNodeTests = splitTests(
     config,
     'amplify_e2e_tests',
     'build_test_deploy',
     join(process.cwd(), 'packages', 'amplify-e2e-tests'),
     CONCURRENCY,
   );
-  saveConfig(splitConfig);
+  const splitPkgTests = splitTests(
+    splitNodeTests,
+    'amplify_e2e_tests_pkg_linux',
+    'build_test_deploy',
+    join(process.cwd(), 'packages', 'amplify-e2e-tests'),
+    CONCURRENCY,
+  );
+  saveConfig(splitPkgTests);
 }
 main();

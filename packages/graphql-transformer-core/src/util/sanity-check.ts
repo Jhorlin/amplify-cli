@@ -36,7 +36,7 @@ export async function check(
     cantAddAndRemoveGSIAtSameTime,
   ];
   // Project rules run on the full set of diffs, the current build, and the next build.
-  const projectRules: ProjectRule[] = [cantHaveMoreThan200Resources, cantMutateMultipleGSIAtUpdateTime];
+  const projectRules: ProjectRule[] = [cantHaveMoreThan500Resources, cantMutateMultipleGSIAtUpdateTime];
   if (cloudBackendDirectoryExists && buildDirectoryExists) {
     const current = await loadDiffableProject(currentCloudBackendDir, rootStackName);
     const next = await loadDiffableProject(buildDirectory, rootStackName);
@@ -230,7 +230,8 @@ export function cantMutateMultipleGSIAtUpdateTime(diffs: Diff[], currentBuild: D
   }
 
   if (diffs) {
-    let gsiCount: number = 0; // max gsiCountAdded = 1 // for update flow
+    // update flow counting the tables which need more than one gsi update
+    let seenTables: Set<String> = new Set();
     for (const diff of diffs) {
       if (
         // implies a field was changed in a GSI after it was created.
@@ -239,13 +240,12 @@ export function cantMutateMultipleGSIAtUpdateTime(diffs: Diff[], currentBuild: D
         diff.path.length >= 6 &&
         diff.path[5] === 'GlobalSecondaryIndexes'
       ) {
-        if (diff.item.kind === 'N' || diff.item.kind === 'D') {
-          gsiCount += 1;
-        }
-        if (gsiCount > 1) {
+        let diffTableName = diff.path[3];
+        if ((diff.item.kind === 'N' || diff.item.kind === 'D') && !seenTables.has(diffTableName)) {
+          seenTables.add(diffTableName);
+        } else if (seenTables.has(diffTableName)) {
           const stackName = basename(diff.path[1], '.json');
-          const tableName = diff.path[3];
-          throwError(stackName, tableName);
+          throwError(stackName, diffTableName);
         }
       }
     }
@@ -295,14 +295,14 @@ export function cantEditLSIKeySchema(diff: Diff, currentBuild: DiffableProject, 
   }
 }
 
-export function cantHaveMoreThan200Resources(diffs: Diff[], currentBuild: DiffableProject, nextBuild: DiffableProject) {
+export function cantHaveMoreThan500Resources(diffs: Diff[], currentBuild: DiffableProject, nextBuild: DiffableProject) {
   const stackKeys = Object.keys(nextBuild.stacks);
   for (const stackName of stackKeys) {
     const stack = nextBuild.stacks[stackName];
-    if (stack && stack.Resources && Object.keys(stack.Resources).length > 200) {
+    if (stack && stack.Resources && Object.keys(stack.Resources).length > 500) {
       throw new InvalidMigrationError(
-        `The ${stackName} stack defines more than 200 resources.`,
-        'CloudFormation templates may contain at most 200 resources.',
+        `The ${stackName} stack defines more than 500 resources.`,
+        'CloudFormation templates may contain at most 500 resources.',
         'If the stack is a custom stack, break the stack up into multiple files in stacks/. ' +
           'If the stack was generated, you have hit a limit and can use the StackMapping argument in ' +
           `${TRANSFORM_CONFIG_FILE_NAME} to fine tune how resources are assigned to stacks.`,
